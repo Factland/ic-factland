@@ -1,0 +1,24 @@
+[package]
+name = "factland"
+version = "0.1.0"
+authors = ["John Plevyak <jplevyak@gmail.com>"]
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[build-dependencies]
+prost-build = "^0.11.0"
+
+[dependencies]
+candid = "0.7.15"
+hex = "0.4.3"
+ic-cdk = "0.5.2"
+ic-cdk-macros = "0.5.2"
+ic-certified-assets = "0.2.5"
+prost = "^0.11.2"
+prost-types = "^0.11.2"
+serde = "1"
+serde_bytes = "0.11"
+serde_cbor = "0.11"
+sha2 = "0.10.6"

@@ -1,0 +1,12 @@
+type Profile = record {
+  updated_time_msecs: opt nat64;
+  username: opt text;
+  password: opt text;
+  email: opt text;
+};
+
+service factland: {
+  register:  (Profile) -> (Profile);
+  login:  () -> (Profile) query;
+  set_profile: (Profile) -> (Profile);
+}

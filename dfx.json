@@ -1,0 +1,18 @@
+{
+  "canisters": {
+    "ic-jury": {
+      "candid": "backend.did",
+      "package": "ic-jury",
+      "type": "rust"
+    }
+  },
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:8080",
+      "replica": {
+        "subnet_type": "system"
+      }
+    }
+  },
+  "version": 1
+}
