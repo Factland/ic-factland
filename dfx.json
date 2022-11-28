@@ -1,8 +1,8 @@
 {
   "canisters": {
-    "ic-jury": {
-      "candid": "backend.did",
-      "package": "ic-jury",
+    "factland": {
+      "candid": "factland.did",
+      "package": "factland",
       "type": "rust"
     }
   },
