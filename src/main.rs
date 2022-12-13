@@ -121,3 +121,11 @@ ic_cdk::export::candid::export_service!();
 fn export_candid() -> String {
     __export_service()
 }
+
+#[cfg(not(target_arch = "wasm32"))]
+fn main() {
+    println!("{}", export_candid());
+}
+
+#[cfg(target_arch = "wasm32")]
+fn main() {}
