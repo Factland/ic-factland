@@ -1,8 +1,3 @@
-/*
-pub mod factland_api {
-    include!(concat!(env!("OUT_DIR"), "/factland_api.rs"));
-}
-*/
 use candid::{CandidType, Deserialize};
 use ic_cdk::export::candid::candid_method;
 use sha2::{Digest, Sha256};
@@ -20,10 +15,6 @@ struct Profile {
     email: Option<String>,
 }
 
-// Everything stored in State should be ephemeral in the sense that
-// we can recover it case of a pre_upgrade failure.  For example,
-// the assets can be rebuilt and the profiles are written through to
-// stable storage.
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
 struct State {
     profiles: HashMap<PrincipalString, Profile>,
