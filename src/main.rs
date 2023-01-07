@@ -1,11 +1,16 @@
-use candid::{CandidType, Deserialize};
+use candid::{CandidType, Decode, Deserialize, Encode, Principal};
 use ic_cdk::export::candid::candid_method;
+use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use sha2::{Digest, Sha256};
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::fmt::Debug;
 
-type PrincipalString = String;
+type Memory = VirtualMemory<DefaultMemoryImpl>;
+type Blob = Vec<u8>;
+
+const MAX_PROFILES_KEY_SIZE: u32 = 32;
+const MAX_PROFILES_VALUE_SIZE: u32 = 256;
 
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
 struct Profile {
@@ -15,95 +20,79 @@ struct Profile {
     email: Option<String>,
 }
 
-#[derive(Clone, Debug, Default, CandidType, Deserialize)]
-struct State {
-    profiles: HashMap<PrincipalString, Profile>,
-}
-
 thread_local! {
-    static STATE: RefCell<State> = RefCell::new(State::default());
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-struct StableState {
-    state: State,
-    assets: ic_certified_assets::StableState,
+    static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
+        RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
+    static PROFILES: RefCell<StableBTreeMap<Memory, Blob, Blob>> = RefCell::new(
+        StableBTreeMap::init_with_sizes(
+            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0))),
+            MAX_PROFILES_KEY_SIZE,
+            MAX_PROFILES_VALUE_SIZE
+            )
+        );
 }
 
 #[ic_cdk_macros::update]
 #[candid_method]
 fn set_profile(profile: Profile) -> Profile {
-    let user = ic_cdk::caller().to_text();
-    STATE.with(|s| {
-        if let Some(old_profile) = s.borrow().profiles.get(&user) {
+    let user = ic_cdk::caller().to_text().as_bytes().to_vec();
+    PROFILES.with(|p| {
+        if let Some(old_profile) = p.borrow().get(&user) {
+            let old_profile = Decode!(&old_profile, Profile).unwrap();
             if old_profile.updated_time_msecs >= profile.updated_time_msecs {
                 return old_profile.clone();
             }
         }
-        *s.borrow_mut().profiles.get_mut(&user).unwrap() = profile.clone();
+        p.borrow_mut()
+            .insert(user, Encode!(&profile).unwrap())
+            .unwrap();
         profile
     })
 }
 
 #[ic_cdk_macros::update]
 #[candid_method]
-fn register(mut profile: Profile) -> Profile {
-    let user = ic_cdk::caller().to_text();
-    STATE.with(|s| {
-        if !s.borrow().profiles.contains_key(&user) {
+async fn register(mut profile: Profile) -> Profile {
+    let user_text = ic_cdk::caller().to_text();
+    let user = user_text.as_bytes().to_vec();
+    PROFILES.with(|p| {
+        if !p.borrow().contains_key(&user) {
             if profile.updated_time_msecs == None {
                 profile.updated_time_msecs = Some(ic_cdk::api::time() / 1000000);
             }
             if profile.username == None {
-                profile.username = Some(user.clone());
+                profile.username = Some(user_text.clone());
             }
-            if profile.password == None {
-                let password = user.clone() + &ic_cdk::api::time().to_string();
-                let mut hasher = Sha256::new();
-                hasher.update(password);
-                let password = hex::encode(hasher.finalize());
-                profile.password = Some(password);
-            }
-            s.borrow_mut().profiles.insert(user.clone(), profile);
+        } else {
+            ic_cdk::api::trap(&"User already registered.");
         }
-        s.borrow().profiles[&user].clone()
+    });
+    if profile.password == None {
+        let raw_rand: Vec<u8> =
+            match ic_cdk::call(Principal::management_canister(), "raw_rand", ()).await {
+                Ok((res,)) => res,
+                Err((_, err)) => ic_cdk::trap(&format!("failed to get rand: {}", err)),
+            };
+        profile.password = Some(hex::encode(Sha256::digest(raw_rand)));
+    }
+    PROFILES.with(|p| {
+        p.borrow_mut()
+            .insert(user.clone(), Encode!(&profile).unwrap())
+            .unwrap();
+        profile
     })
 }
 
 #[ic_cdk_macros::query]
 #[candid_method]
 fn login() -> Profile {
-    let user = ic_cdk::caller().to_text();
-    STATE.with(|s| {
-        if !s.borrow().profiles.contains_key(&user) {
+    let user = ic_cdk::caller().to_text().as_bytes().to_vec();
+    PROFILES.with(|p| {
+        if !p.borrow().contains_key(&user) {
             ic_cdk::api::trap(&"User not found.");
         }
-        s.borrow().profiles[&user].clone()
+        Decode!(&p.borrow().get(&user).unwrap(), Profile).unwrap()
     })
-}
-
-#[ic_cdk_macros::init]
-fn init() {
-    ic_certified_assets::init();
-}
-
-#[ic_cdk_macros::pre_upgrade]
-fn pre_upgrade() {
-    let stable_state = STATE.with(|s| StableState {
-        state: s.take(),
-        assets: ic_certified_assets::pre_upgrade(),
-    });
-    ic_cdk::storage::stable_save((stable_state,)).expect("failed to save stable state");
-}
-
-#[ic_cdk_macros::post_upgrade]
-fn post_upgrade() {
-    let (StableState { assets, state },): (StableState,) =
-        ic_cdk::storage::stable_restore().expect("failed to restore stable state");
-    ic_certified_assets::post_upgrade(assets);
-    STATE.with(|s| {
-        s.replace(state);
-    });
 }
 
 ic_cdk::export::candid::export_service!();
