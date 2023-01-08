@@ -8,7 +8,9 @@ export interface Profile {
   'updated_time_msecs' : [] | [bigint],
 }
 export interface _SERVICE {
+  'backup' : ActorMethod<[], Array<[string, Profile]>>,
   'login' : ActorMethod<[], Profile>,
   'register' : ActorMethod<[Profile], Profile>,
+  'restore' : ActorMethod<[Array<[string, Profile]>], undefined>,
   'set_profile' : ActorMethod<[Profile], Profile>,
 }

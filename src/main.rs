@@ -95,6 +95,37 @@ fn login() -> Profile {
     })
 }
 
+#[ic_cdk_macros::query]
+#[candid_method]
+fn backup() -> Vec<(String, Profile)> {
+    PROFILES.with(|p| {
+        p.borrow()
+            .iter()
+            .map(|(k, p)| {
+                (
+                    String::from_utf8_lossy(&k).to_string(),
+                    Decode!(&p, Profile).unwrap(),
+                )
+            })
+            .collect()
+    })
+}
+
+#[ic_cdk_macros::update]
+#[candid_method]
+fn restore(profiles: Vec<(String, Profile)>) {
+    let user_text = ic_cdk::caller().to_text();
+    let user = user_text.as_bytes().to_vec();
+    ic_cdk::eprintln!("{} {}", user_text, user.len());
+    PROFILES.with(|m| {
+        let mut m = m.borrow_mut();
+        for p in profiles {
+            m.insert(p.0.as_bytes().to_vec(), Encode!(&p.1).unwrap())
+                .unwrap();
+        }
+    });
+}
+
 ic_cdk::export::candid::export_service!();
 
 #[ic_cdk_macros::query(name = "__get_candid_interface_tmp_hack")]

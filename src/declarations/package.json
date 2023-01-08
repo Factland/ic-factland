@@ -1,0 +1,24 @@
+{
+  "dependencies": {
+    "@dfinity/agent": "^0.14.0",
+    "@dfinity/candid": "^0.14.0",
+    "@dfinity/identity": "^0.14.0",
+    "@dfinity/principal": "^0.14.0",
+    "@noble/ed25519": "^1.7.1",
+    "base64-arraybuffer": "^1.0.2"
+  },
+  "devDependencies": {
+    "prettier": "2.7.1"
+  },
+  "name": "test",
+  "version": "1.0.0",
+  "description": "foo",
+  "main": "tests.js",
+  "scripts": {
+    "format": "npx prettier --write .",
+    "run": "node tests.js"
+  },
+  "author": "",
+  "type": "module",
+  "license": "ISC"
+}

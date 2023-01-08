@@ -9,4 +9,6 @@ service factland: {
   register:  (Profile) -> (Profile);
   login:  () -> (Profile) query;
   set_profile: (Profile) -> (Profile);
+  backup: () -> (vec record { text; Profile }) query;
+  restore: (vec record { text; Profile }) -> ();
 }
