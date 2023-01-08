@@ -81,18 +81,18 @@ const identity = Secp256k1KeyIdentity.fromSecretKey(secret_key);
 const principal = identity.getPrincipal().toText();
 const raw_principal = identity.getPrincipal().toUint8Array();
 
-// const canisterId = "5u3nb-maaaa-aaaae-qaega-cai";
-// const url = 'https://ic0.app';
-const canisterId = "rrkah-fqaaa-aaaaa-aaaaq-cai";
-const url = 'http://' + canisterId + ".localhost:8080";
+const canisterId = "5u3nb-maaaa-aaaae-qaega-cai";
+const url = 'https://ic0.app';
+//const canisterId = "rrkah-fqaaa-aaaaa-aaaaq-cai";
+//const url = 'http://' + canisterId + ".localhost:8080";
 
 export const createActor = (idlFactory, canisterId, options) => {
 	let agentOptions = options ? {...options.agentOptions} : {};
 	const agent = new HttpAgent(agentOptions);
-   agent.fetchRootKey().catch(err => {
-     console.warn('Unable to fetch root key. Check to ensure that your local replica is running');
-     console.error(err);
-   });
+   //agent.fetchRootKey().catch(err => {
+   //  console.warn('Unable to fetch root key. Check to ensure that your local replica is running');
+   //  console.error(err);
+   //});
 	return Actor.createActor(idlFactory, {
 		agent,
 		canisterId,

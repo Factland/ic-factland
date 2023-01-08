@@ -9,7 +9,7 @@ use std::fmt::Debug;
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 type Blob = Vec<u8>;
 
-const MAX_PROFILES_KEY_SIZE: u32 = 32;
+const MAX_PROFILES_KEY_SIZE: u32 = 64;
 const MAX_PROFILES_VALUE_SIZE: u32 = 256;
 
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
