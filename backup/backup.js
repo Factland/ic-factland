@@ -64,7 +64,7 @@ function blockToHex(block) {
 // Install the global brower compatible fetch.
 global.fetch = fetch;
 
-// Obtain controller identity.
+// Obtain identity.
 const privateKeyFile = fs.readFileSync('/home/jplevyak/.config/dfx/identity/factland/identity.pem');
 const privateKeyObject = crypto.createPrivateKey({
 	key: privateKeyFile,
@@ -80,6 +80,11 @@ let secret_key = new Uint8Array(privateKeyDER.slice(7, 7+32));
 const identity = Secp256k1KeyIdentity.fromSecretKey(secret_key);
 const principal = identity.getPrincipal().toText();
 const raw_principal = identity.getPrincipal().toUint8Array();
+
+// Authorize this identity.
+console.log('authorizing principal', principal);
+let authorize_cmd = 'dfx canister --network ic call factland authorize \'(principal "' + principal + '")\'';
+console.log('exec:', authorize_cmd, await exec(authorize_cmd));
 
 const canisterId = "5u3nb-maaaa-aaaae-qaega-cai";
 const url = 'https://ic0.app';

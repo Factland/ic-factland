@@ -5,12 +5,15 @@ use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use sha2::{Digest, Sha256};
 use std::cell::RefCell;
 use std::fmt::Debug;
+#[macro_use]
+extern crate num_derive;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 type Blob = Vec<u8>;
 
-const MAX_PROFILES_KEY_SIZE: u32 = 64;
+const MAX_PROFILES_KEY_SIZE: u32 = 32;
 const MAX_PROFILES_VALUE_SIZE: u32 = 256;
+const MAX_AUTH_KEY_SIZE: u32 = 32;
 
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
 struct Profile {
@@ -18,6 +21,11 @@ struct Profile {
     username: Option<String>,
     password: Option<String>,
     email: Option<String>,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize, FromPrimitive)]
+enum Auth {
+    Admin,
 }
 
 thread_local! {
@@ -30,12 +38,19 @@ thread_local! {
             MAX_PROFILES_VALUE_SIZE
             )
         );
+    static AUTH: RefCell<StableBTreeMap<Memory, Blob, u32>> = RefCell::new(
+        StableBTreeMap::init_with_sizes(
+            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(3))),
+            MAX_AUTH_KEY_SIZE,
+            4
+            )
+        );
 }
 
 #[ic_cdk_macros::update]
 #[candid_method]
 fn set_profile(profile: Profile) -> Profile {
-    let user = ic_cdk::caller().to_text().as_bytes().to_vec();
+    let user = ic_cdk::caller().as_slice().to_vec();
     PROFILES.with(|p| {
         if let Some(old_profile) = p.borrow().get(&user) {
             let old_profile = Decode!(&old_profile, Profile).unwrap();
@@ -53,8 +68,8 @@ fn set_profile(profile: Profile) -> Profile {
 #[ic_cdk_macros::update]
 #[candid_method]
 async fn register(mut profile: Profile) -> Profile {
+    let user = ic_cdk::caller().as_slice().to_vec();
     let user_text = ic_cdk::caller().to_text();
-    let user = user_text.as_bytes().to_vec();
     PROFILES.with(|p| {
         if !p.borrow().contains_key(&user) {
             if profile.updated_time_msecs == None {
@@ -77,7 +92,7 @@ async fn register(mut profile: Profile) -> Profile {
     }
     PROFILES.with(|p| {
         p.borrow_mut()
-            .insert(user.clone(), Encode!(&profile).unwrap())
+            .insert(user, Encode!(&profile).unwrap())
             .unwrap();
         profile
     })
@@ -86,7 +101,7 @@ async fn register(mut profile: Profile) -> Profile {
 #[ic_cdk_macros::query]
 #[candid_method]
 fn login() -> Profile {
-    let user = ic_cdk::caller().to_text().as_bytes().to_vec();
+    let user = ic_cdk::caller().as_slice().to_vec();
     PROFILES.with(|p| {
         if !p.borrow().contains_key(&user) {
             ic_cdk::api::trap(&"User not found.");
@@ -95,7 +110,7 @@ fn login() -> Profile {
     })
 }
 
-#[ic_cdk_macros::query]
+#[ic_cdk_macros::query(guard = "is_authorized")]
 #[candid_method]
 fn backup() -> Vec<(String, Profile)> {
     PROFILES.with(|p| {
@@ -103,7 +118,7 @@ fn backup() -> Vec<(String, Profile)> {
             .iter()
             .map(|(k, p)| {
                 (
-                    String::from_utf8_lossy(&k).to_string(),
+                    Principal::from_slice(&k).to_text(),
                     Decode!(&p, Profile).unwrap(),
                 )
             })
@@ -111,18 +126,70 @@ fn backup() -> Vec<(String, Profile)> {
     })
 }
 
-#[ic_cdk_macros::update]
+#[ic_cdk_macros::update(guard = "is_authorized")]
 #[candid_method]
 fn restore(profiles: Vec<(String, Profile)>) {
-    let user_text = ic_cdk::caller().to_text();
-    let user = user_text.as_bytes().to_vec();
-    ic_cdk::eprintln!("{} {}", user_text, user.len());
     PROFILES.with(|m| {
         let mut m = m.borrow_mut();
         for p in profiles {
-            m.insert(p.0.as_bytes().to_vec(), Encode!(&p.1).unwrap())
+            let principal = Principal::from_text(p.0).unwrap();
+            m.insert(principal.as_slice().to_vec(), Encode!(&p.1).unwrap())
                 .unwrap();
         }
+    });
+}
+
+#[ic_cdk_macros::query]
+#[candid_method]
+fn get_authorized() -> Vec<Principal> {
+    let mut authorized = Vec::new();
+    AUTH.with(|a| {
+        for (k, _v) in a.borrow().iter() {
+            authorized.push(Principal::from_slice(&k));
+        }
+    });
+    authorized
+}
+
+#[ic_cdk_macros::update(guard = "is_authorized")]
+#[candid_method]
+fn authorize(principal: Principal) {
+    authorize_principal(&principal);
+}
+
+#[ic_cdk_macros::update(guard = "is_authorized")]
+#[candid_method]
+fn deauthorize(principal: Principal) {
+    AUTH.with(|a| {
+        a.borrow_mut()
+            .remove(&principal.as_slice().to_vec())
+            .unwrap();
+    });
+}
+
+#[ic_cdk_macros::init]
+fn canister_init() {
+    authorize_principal(&ic_cdk::caller());
+}
+
+fn is_authorized() -> Result<(), String> {
+    AUTH.with(|a| {
+        if a.borrow()
+            .contains_key(&ic_cdk::caller().as_slice().to_vec())
+        {
+            Ok(())
+        } else {
+            Err("You are not authorized".to_string())
+        }
+    })
+}
+
+fn authorize_principal(principal: &Principal) {
+    let value = Auth::Admin;
+    AUTH.with(|a| {
+        a.borrow_mut()
+            .insert(principal.as_slice().to_vec(), value as u32)
+            .unwrap();
     });
 }
 

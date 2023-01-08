@@ -11,4 +11,10 @@ service factland: {
   set_profile: (Profile) -> (Profile);
   backup: () -> (vec record { text; Profile }) query;
   restore: (vec record { text; Profile }) -> ();
+  //
+  // Manage the set of Principals allowed to backup/restore.
+  //
+  authorize: (principal) -> ();
+  deauthorize: (principal) -> ();
+  get_authorized: () -> (vec principal) query;
 }
