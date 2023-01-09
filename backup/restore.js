@@ -107,5 +107,5 @@ export const createActor = (idlFactory, canisterId, options) => {
 
 let actor = createActor(idlFactory, canisterId, { agentOptions: { host: url, identity }});
 
-const profiles = JSON.parse(fs.readFileSync('./backup.d'));
+const profiles = JSON.parse(fs.readFileSync('./backup.dat'));
 await actor.restore(profiles);
