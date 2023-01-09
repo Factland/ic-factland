@@ -22,6 +22,9 @@ service factland: {
   register:  (Profile) -> (Profile);
   login:  () -> (Profile) query;
   set_profile: (Profile) -> (Profile);
+  //
+  // Backup/restore map from principal (in text) to Profile(s).
+  //
   backup: () -> (vec record { text; Profile }) query;
   restore: (vec record { text; Profile }) -> ();
   //
