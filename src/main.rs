@@ -14,6 +14,7 @@ type Blob = Vec<u8>;
 const MAX_PROFILES_KEY_SIZE: u32 = 32;
 const MAX_PROFILES_VALUE_SIZE: u32 = 256;
 const MAX_AUTH_KEY_SIZE: u32 = 32;
+const WASM_PAGE_SIZE: u64 = 65536;
 
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
 struct Profile {
@@ -137,6 +138,34 @@ fn restore(profiles: Vec<(String, Profile)>) {
                 .unwrap();
         }
     });
+}
+
+#[ic_cdk_macros::query(guard = "is_authorized")]
+#[candid_method]
+fn stable_size() -> u64 {
+    ic_cdk::api::stable::stable64_size() * WASM_PAGE_SIZE
+}
+
+#[ic_cdk_macros::query(guard = "is_authorized")]
+#[candid_method]
+fn stable_read(offset: u64, length: u64) -> Vec<u8> {
+    let mut buffer = Vec::new();
+    buffer.resize(length as usize, 0);
+    ic_cdk::api::stable::stable64_read(offset, buffer.as_mut_slice());
+    buffer
+}
+
+#[ic_cdk_macros::update(guard = "is_authorized")]
+#[candid_method]
+fn stable_write(offset: u64, buffer: Vec<u8>) {
+    let size = offset + buffer.len() as u64;
+    let old_size = stable_size() as u64;
+    if size > old_size {
+        let old_pages = old_size / WASM_PAGE_SIZE;
+        let pages = (size + (WASM_PAGE_SIZE - 1)) / WASM_PAGE_SIZE;
+        ic_cdk::api::stable::stable64_grow(pages - old_pages).unwrap();
+    }
+    ic_cdk::api::stable::stable64_write(offset, buffer.as_slice());
 }
 
 #[ic_cdk_macros::query]

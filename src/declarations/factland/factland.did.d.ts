@@ -16,4 +16,7 @@ export interface _SERVICE {
   'register' : ActorMethod<[Profile], Profile>,
   'restore' : ActorMethod<[Array<[string, Profile]>], undefined>,
   'set_profile' : ActorMethod<[Profile], Profile>,
+  'stable_read' : ActorMethod<[bigint, bigint], Uint8Array>,
+  'stable_size' : ActorMethod<[], bigint>,
+  'stable_write' : ActorMethod<[bigint, Uint8Array], undefined>,
 }
