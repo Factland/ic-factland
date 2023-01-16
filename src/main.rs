@@ -1,4 +1,5 @@
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
+use ic_cdk::api::management_canister::main::{canister_status, CanisterIdRecord};
 use ic_cdk::export::candid::candid_method;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
@@ -140,26 +141,35 @@ fn restore(profiles: Vec<(String, Profile)>) {
     });
 }
 
-#[ic_cdk_macros::query(guard = "is_authorized")]
+#[ic_cdk_macros::query]
 #[candid_method]
-fn stable_size() -> u64 {
+async fn stable_size() -> u64 {
+    if !is_controller().await {
+        ic_cdk::api::trap(&"Not controller.");
+    }
     ic_cdk::api::stable::stable64_size() * WASM_PAGE_SIZE
 }
 
-#[ic_cdk_macros::query(guard = "is_authorized")]
+#[ic_cdk_macros::query]
 #[candid_method]
-fn stable_read(offset: u64, length: u64) -> Vec<u8> {
+async fn stable_read(offset: u64, length: u64) -> Vec<u8> {
+    if !is_controller().await {
+        ic_cdk::api::trap(&"Not controller.");
+    }
     let mut buffer = Vec::new();
     buffer.resize(length as usize, 0);
     ic_cdk::api::stable::stable64_read(offset, buffer.as_mut_slice());
     buffer
 }
 
-#[ic_cdk_macros::update(guard = "is_authorized")]
+#[ic_cdk_macros::update]
 #[candid_method]
-fn stable_write(offset: u64, buffer: Vec<u8>) {
+async fn stable_write(offset: u64, buffer: Vec<u8>) {
+    if !is_controller().await {
+        ic_cdk::api::trap(&"Not controller.");
+    }
     let size = offset + buffer.len() as u64;
-    let old_size = stable_size() as u64;
+    let old_size = ic_cdk::api::stable::stable64_size() * WASM_PAGE_SIZE;
     if size > old_size {
         let old_pages = old_size / WASM_PAGE_SIZE;
         let pages = (size + (WASM_PAGE_SIZE - 1)) / WASM_PAGE_SIZE;
@@ -211,6 +221,15 @@ fn is_authorized() -> Result<(), String> {
             Err("You are not authorized".to_string())
         }
     })
+}
+
+async fn is_controller() -> bool {
+    let status = canister_status(CanisterIdRecord {
+        canister_id: ic_cdk::api::id(),
+    })
+    .await
+    .unwrap();
+    status.0.settings.controllers.contains(&ic_cdk::caller())
 }
 
 fn authorize_principal(principal: &Principal) {
