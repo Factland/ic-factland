@@ -179,7 +179,7 @@ fn stable_read(offset: u64, length: u64) -> Vec<u8> {
     buffer
 }
 
-#[ic_cdk_macros::update]
+#[ic_cdk_macros::update(guard = "is_stable_authorized")]
 #[candid_method]
 fn stable_write(offset: u64, buffer: Vec<u8>) {
     let size = offset + buffer.len() as u64;
