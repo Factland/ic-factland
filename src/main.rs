@@ -11,6 +11,7 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fmt::Debug;
+#[cfg(not(target_arch = "wasm32"))]
 use std::fs::File;
 #[macro_use]
 extern crate num_derive;
