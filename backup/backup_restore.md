@@ -1,10 +1,10 @@
-* Backup and Restore of Data on the Internet Computer
+# Backup and Restore of Data on the Internet Computer
 
 This article describes how to backup, restore and disaster recover stable memory data in Rust canister smart contracts on the Internet Computer.
 
 The Internet Computer uses [Stable Memory](https://internetcomputer.org/docs/current/references/ic-interface-spec#system-api-stable-memory) to store data over upgrades to the canister smart contract.  For Rust, this memory can be managed by a library of data structures e.g. [stable-structures](https://github.com/dfinity/stable-structures). Access to this memory is entirely under control of the smart contract so any defect in that contract can result in damage to that data, and in the worst case a broken contract.  Debugging, maintenance and disaster recovery are all possible if we can backup, view, modify and restore stable memory.
 
-** A dApp with Stable Structures
+## A dApp with Stable Structures
 
 This example is taken from the decentralized fact checking dApp [Factland](https://factland.org) and the code is available on [github](https://github.com/Factland/ic-factland).  Consider this code fragment which uses stable-structures to store user profiles:
 
@@ -32,7 +32,7 @@ thread_local! {
 
 Here we are defining a stable memory manager and a `BTreeMap` from `Principal` (wrapped in a Storable so that it can be stored in stable memory) to a user `Profile`.  Eventually this dApp will be controlled by a DOA via the [SNS](https://internetcomputer.org/docs/current/tokenomics/sns/sns-intro-tokens) but particularly while it is in active development we want to be able to backup and restore the profiles to enable a fast and safe development cycle.
 
-** Application Level Backup and Restore
+## Application Level Backup and Restore
 
 The first thing we can do is export the data at the application level:
 
@@ -106,7 +106,7 @@ const profiles = JSON.parse(fs.readFileSync('./backup.dat'));
 await actor.restore(profiles);
 ```
 
-** Low level Backup and Restore
+## Low level Backup and Restore
 
 If for any reason the dApp fails catastrophically, the stable memory memory can still be backed up, viewed and modified offline, repaired and restored.  To support this we need to be able to get the size of the stable memory, read and write it:
   
