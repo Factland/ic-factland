@@ -3,10 +3,11 @@ use ic_cdk::api::management_canister::main::{canister_status, CanisterIdRecord};
 use ic_cdk::export::candid::candid_method;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 #[cfg(not(target_arch = "wasm32"))]
-use ic_stable_structures::{file_mem::FileMemory, StableBTreeMap};
+use ic_stable_structures::{file_mem::FileMemory, StableBTreeMap, Storable};
 #[cfg(target_arch = "wasm32")]
-use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
+use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap, Storable};
 use sha2::{Digest, Sha256};
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fmt::Debug;
@@ -34,9 +35,32 @@ struct Profile {
     email: Option<String>,
 }
 
+#[derive(Clone, Debug, CandidType, Deserialize)]
+struct PrincipalStorable(Principal);
+
 #[derive(Clone, Debug, CandidType, Deserialize, FromPrimitive)]
 enum Auth {
     Admin,
+}
+
+impl Storable for Profile {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        Cow::Owned(Encode!(self).unwrap())
+    }
+
+    fn from_bytes(bytes: Vec<u8>) -> Self {
+        Decode!(&bytes, Self).unwrap()
+    }
+}
+
+impl Storable for PrincipalStorable {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        Cow::Owned(self.0.as_slice().to_vec())
+    }
+
+    fn from_bytes(bytes: Vec<u8>) -> Self {
+        PrincipalStorable(Principal::from_slice(&bytes))
+    }
 }
 
 thread_local! {
@@ -46,7 +70,7 @@ thread_local! {
 #[cfg(target_arch = "wasm32")]
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
         RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
-    static PROFILES: RefCell<StableBTreeMap<Memory, Blob, Blob>> = RefCell::new(
+    static PROFILES: RefCell<StableBTreeMap<Memory, PrincipalStorable, Profile>> = RefCell::new(
         StableBTreeMap::init_with_sizes(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0))),
             MAX_PROFILES_KEY_SIZE,
@@ -66,17 +90,14 @@ thread_local! {
 #[ic_cdk_macros::update]
 #[candid_method]
 fn set_profile(profile: Profile) -> Profile {
-    let user = ic_cdk::caller().as_slice().to_vec();
+    let user = PrincipalStorable(ic_cdk::caller());
     PROFILES.with(|p| {
         if let Some(old_profile) = p.borrow().get(&user) {
-            let old_profile = Decode!(&old_profile, Profile).unwrap();
             if old_profile.updated_time_msecs >= profile.updated_time_msecs {
                 return old_profile.clone();
             }
         }
-        p.borrow_mut()
-            .insert(user, Encode!(&profile).unwrap())
-            .unwrap();
+        p.borrow_mut().insert(user, profile.clone()).unwrap();
         profile
     })
 }
@@ -84,7 +105,7 @@ fn set_profile(profile: Profile) -> Profile {
 #[ic_cdk_macros::update]
 #[candid_method]
 async fn register(mut profile: Profile) -> Profile {
-    let user = ic_cdk::caller().as_slice().to_vec();
+    let user = PrincipalStorable(ic_cdk::caller());
     let user_text = ic_cdk::caller().to_text();
     PROFILES.with(|p| {
         if !p.borrow().contains_key(&user) {
@@ -107,9 +128,7 @@ async fn register(mut profile: Profile) -> Profile {
         profile.password = Some(hex::encode(Sha256::digest(raw_rand)));
     }
     PROFILES.with(|p| {
-        p.borrow_mut()
-            .insert(user, Encode!(&profile).unwrap())
-            .unwrap();
+        p.borrow_mut().insert(user, profile.clone()).unwrap();
         profile
     })
 }
@@ -117,29 +136,19 @@ async fn register(mut profile: Profile) -> Profile {
 #[ic_cdk_macros::query]
 #[candid_method]
 fn login() -> Profile {
-    let user = ic_cdk::caller().as_slice().to_vec();
+    let user = PrincipalStorable(ic_cdk::caller());
     PROFILES.with(|p| {
         if !p.borrow().contains_key(&user) {
             ic_cdk::api::trap(&"User not found.");
         }
-        Decode!(&p.borrow().get(&user).unwrap(), Profile).unwrap()
+        p.borrow().get(&user).unwrap()
     })
 }
 
 #[ic_cdk_macros::query(guard = "is_authorized")]
 #[candid_method]
 fn backup() -> Vec<(String, Profile)> {
-    PROFILES.with(|p| {
-        p.borrow()
-            .iter()
-            .map(|(k, p)| {
-                (
-                    Principal::from_slice(&k).to_text(),
-                    Decode!(&p, Profile).unwrap(),
-                )
-            })
-            .collect()
-    })
+    PROFILES.with(|p| p.borrow().iter().map(|(k, p)| (k.0.to_text(), p)).collect())
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
@@ -148,9 +157,8 @@ fn restore(profiles: Vec<(String, Profile)>) {
     PROFILES.with(|m| {
         let mut m = m.borrow_mut();
         for p in profiles {
-            let principal = Principal::from_text(p.0).unwrap();
-            m.insert(principal.as_slice().to_vec(), Encode!(&p.1).unwrap())
-                .unwrap();
+            let principal = PrincipalStorable(Principal::from_text(p.0).unwrap());
+            m.insert(principal, p.1).unwrap();
         }
     });
 }
