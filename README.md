@@ -46,7 +46,7 @@ The canister uses stable memory to store all data, so it is not necessary to bac
 
 The installation principal is assumed to be available as the default in `dfx`.  The backup and restore identity is assumed to be `factland`.  The canister id of the canister smart contract is hard coded in the scripts.  These can be changed in the code.
 
-A raw backup/restore interface is also available for debugging and last resort disaster recovery.
+A raw backup/restore interface is also available for debugging and last resort disaster recovery. The user is responsible for ensuring that there are no updates to the canister state during raw access to stable memory by (for example) `deauthorize`-ing everyone or installing a canister with only the `stable_xxx` methods.
 
 ### Backup
 

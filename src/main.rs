@@ -141,7 +141,8 @@ fn restore(profiles: Vec<(String, Profile)>) {
     });
 }
 
-#[ic_cdk_macros::query]
+// This is an update so that it can read the controllers.
+#[ic_cdk_macros::update]
 #[candid_method]
 async fn stable_size() -> u64 {
     if !is_controller().await {
@@ -150,7 +151,8 @@ async fn stable_size() -> u64 {
     ic_cdk::api::stable::stable64_size() * WASM_PAGE_SIZE
 }
 
-#[ic_cdk_macros::query]
+// This is an update so that it can read the controllers.
+#[ic_cdk_macros::update]
 #[candid_method]
 async fn stable_read(offset: u64, length: u64) -> Vec<u8> {
     if !is_controller().await {
@@ -224,12 +226,13 @@ fn is_authorized() -> Result<(), String> {
 }
 
 async fn is_controller() -> bool {
+    let caller = ic_cdk::caller();
     let status = canister_status(CanisterIdRecord {
         canister_id: ic_cdk::api::id(),
     })
     .await
     .unwrap();
-    status.0.settings.controllers.contains(&ic_cdk::caller())
+    status.0.settings.controllers.contains(&caller)
 }
 
 fn authorize_principal(principal: &Principal) {
