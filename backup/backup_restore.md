@@ -185,4 +185,4 @@ fn main() {
 }
 ```
 
-The low level backup and restore javascript is also available in the [Factland](https://factland.org) [github repo](https://github.com/Factland/ic-factland). Backup and restore operates on one megabyte blocks.  In order to make this relatively fast the backup uses queries and the restore can compare a modified image to an original image, restoring only the block which have been changed.
+The low level backup and restore javascript is also available in the [Factland](https://factland.org) [github repo](https://github.com/Factland/ic-factland). Backup and restore operates on one megabyte blocks.  In order to make this relatively fast the backup uses queries and the restore can compare a modified image to an original image, restoring only the blocks which have been changed.
