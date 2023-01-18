@@ -30,7 +30,7 @@ thread_local! {
 }
 ```
 
-Here we are defining a stable memory manager and a `BTreeMap` from `Principal` (wrapped in a Storable so that it can be stored in stable memory) to a user `Profile`.  Eventually this dApp will be controlled by a DOA via the [SNS](https://internetcomputer.org/docs/current/tokenomics/sns/sns-intro-tokens) but particularly while it is in active development we want to be able to backup and restore the profiles to enable a fast and safe development cycle.
+Here we are defining a stable memory manager and a `BTreeMap` from `Principal` (wrapped in a Storable so that it can be stored in stable memory) to a user `Profile`.  Eventually this dApp will be controlled by a DOA via the [SNS](https://internetcomputer.org/docs/current/tokenomics/sns/sns-intro-tokens) but particularly while it is in active development we want to be able to backup and restore the profiles to enable a fast and safe development cycle.  Note that we are using `thread_local` and `RefCell` to tell Rust that we are operating in a single threaded environment.
 
 ## Application Level Backup and Restore
 
@@ -92,7 +92,7 @@ static AUTH: RefCell<StableBTreeMap<Memory, Blob, u32>> = RefCell::new(
   );
 ```
 
-Client code which does the backup and restore is available in [here](https://github.com/Factland/ic-factland/tree/main/backup).  This code written in javascript and runs on nodejs.  It uses the deploying Principal to authorize an operator Principal which does the backkup, saving the data in JSON format, and restore.  Once the operator Principal is authorized and the client is initialized the core code just prints out the data in JSON format:
+Client code is available in the Factland repo for [backup](https://github.com/Factland/ic-factland/tree/main/backup/backup.js) and [restore](https://github.com/Factland/ic-factland/tree/main/backup/restore.js).  This code written in javascript and runs on nodejs.  It uses the deploying Principal to authorize an operator Principal which does the backkup, saving the data in JSON format, and restore.  Once the operator Principal is authorized and the client is initialized the core code just prints out the data in JSON format:
 
 ```javascript
 let profiles = await actor.backup();
@@ -141,11 +141,11 @@ fn stable_write(offset: u64, buffer: Vec<u8>) {
 }
 ```
 
-Of course there is a chickn and egg problem with authorization.  The standard authorization for the dApp uses stable memory, so we need low level authorization stored in canister memory which will be ephemeral and will be lost when the canister is upgraded.  This is less convenient, but low level backup and restore is not expected to be used except in the case of a disaster:
+Of course there is a chicken and egg problem with authorization.  The standard authorization for the dApp uses stable memory, so we need low level authorization stored in canister memory which will be ephemeral and will be lost when the canister is upgraded.  This is less convenient, but low level backup and restore is not expected to be used frequently:
 
 ```rust
   ... within the thread_local! block
-  static AUTH_STABLE: RefCell<HashSet<Principal>> = RefCell::new(HashSet::<Principal>::new());
+static AUTH_STABLE: RefCell<HashSet<Principal>> = RefCell::new(HashSet::<Principal>::new());
 
 fn is_stable_authorized() -> Result<(), String> {
   AUTH_STABLE.with(|a| {
@@ -158,7 +158,7 @@ fn is_stable_authorized() -> Result<(), String> {
 }
 ```
 
-In order to read an write backed up image of stable stable memory, we can compile the dApp and run it locally using conditional compilation directives to differentiate the environment:
+In order to read and write backed up images of stable stable memory, we can compile the dApp and run it locally using conditional compilation directives to differentiate the environment:
 
 ```rust
 thread_local! {
