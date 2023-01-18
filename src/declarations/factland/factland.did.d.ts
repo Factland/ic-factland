@@ -9,6 +9,7 @@ export interface Profile {
 }
 export interface _SERVICE {
   'authorize' : ActorMethod<[Principal], undefined>,
+  'authorize_controllers' : ActorMethod<[], undefined>,
   'backup' : ActorMethod<[], Array<[string, Profile]>>,
   'deauthorize' : ActorMethod<[Principal], undefined>,
   'get_authorized' : ActorMethod<[], Array<Principal>>,
@@ -16,6 +17,7 @@ export interface _SERVICE {
   'register' : ActorMethod<[Profile], Profile>,
   'restore' : ActorMethod<[Array<[string, Profile]>], undefined>,
   'set_profile' : ActorMethod<[Profile], Profile>,
+  'stable_authorize' : ActorMethod<[Principal], undefined>,
   'stable_read' : ActorMethod<[bigint, bigint], Uint8Array>,
   'stable_size' : ActorMethod<[], bigint>,
   'stable_write' : ActorMethod<[bigint, Uint8Array], undefined>,

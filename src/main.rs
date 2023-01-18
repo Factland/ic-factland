@@ -5,6 +5,7 @@ use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemor
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use sha2::{Digest, Sha256};
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::fmt::Debug;
 #[macro_use]
 extern crate num_derive;
@@ -47,6 +48,7 @@ thread_local! {
             4
             )
         );
+    static AUTH_STABLE: RefCell<HashSet<Principal>> = RefCell::new(HashSet::<Principal>::new());
 }
 
 #[ic_cdk_macros::update]
@@ -141,23 +143,15 @@ fn restore(profiles: Vec<(String, Profile)>) {
     });
 }
 
-// This is an update so that it can read the controllers.
-#[ic_cdk_macros::update]
+#[ic_cdk_macros::query(guard = "is_stable_authorized")]
 #[candid_method]
-async fn stable_size() -> u64 {
-    if !is_controller().await {
-        ic_cdk::api::trap(&"Not controller.");
-    }
+fn stable_size() -> u64 {
     ic_cdk::api::stable::stable64_size() * WASM_PAGE_SIZE
 }
 
-// This is an update so that it can read the controllers.
-#[ic_cdk_macros::update]
+#[ic_cdk_macros::query(guard = "is_stable_authorized")]
 #[candid_method]
-async fn stable_read(offset: u64, length: u64) -> Vec<u8> {
-    if !is_controller().await {
-        ic_cdk::api::trap(&"Not controller.");
-    }
+fn stable_read(offset: u64, length: u64) -> Vec<u8> {
     let mut buffer = Vec::new();
     buffer.resize(length as usize, 0);
     ic_cdk::api::stable::stable64_read(offset, buffer.as_mut_slice());
@@ -166,10 +160,7 @@ async fn stable_read(offset: u64, length: u64) -> Vec<u8> {
 
 #[ic_cdk_macros::update]
 #[candid_method]
-async fn stable_write(offset: u64, buffer: Vec<u8>) {
-    if !is_controller().await {
-        ic_cdk::api::trap(&"Not controller.");
-    }
+fn stable_write(offset: u64, buffer: Vec<u8>) {
     let size = offset + buffer.len() as u64;
     let old_size = ic_cdk::api::stable::stable64_size() * WASM_PAGE_SIZE;
     if size > old_size {
@@ -198,6 +189,12 @@ fn authorize(principal: Principal) {
     authorize_principal(&principal);
 }
 
+#[ic_cdk_macros::update(guard = "is_stable_authorized")]
+#[candid_method]
+fn stable_authorize(principal: Principal) {
+    AUTH_STABLE.with(|a| a.borrow_mut().insert(principal));
+}
+
 #[ic_cdk_macros::update(guard = "is_authorized")]
 #[candid_method]
 fn deauthorize(principal: Principal) {
@@ -211,6 +208,23 @@ fn deauthorize(principal: Principal) {
 #[ic_cdk_macros::init]
 fn canister_init() {
     authorize_principal(&ic_cdk::caller());
+    stable_authorize(ic_cdk::caller());
+}
+
+#[ic_cdk_macros::update(guard = "is_authorized")]
+#[candid_method]
+async fn authorize_controllers() {
+    let status = canister_status(CanisterIdRecord {
+        canister_id: ic_cdk::api::id(),
+    })
+    .await
+    .unwrap();
+    AUTH_STABLE.with(|a| {
+        for p in status.0.settings.controllers.clone() {
+            authorize_principal(&p);
+            a.borrow_mut().insert(p);
+        }
+    });
 }
 
 fn is_authorized() -> Result<(), String> {
@@ -225,14 +239,14 @@ fn is_authorized() -> Result<(), String> {
     })
 }
 
-async fn is_controller() -> bool {
-    let caller = ic_cdk::caller();
-    let status = canister_status(CanisterIdRecord {
-        canister_id: ic_cdk::api::id(),
+fn is_stable_authorized() -> Result<(), String> {
+    AUTH_STABLE.with(|a| {
+        if a.borrow().contains(&ic_cdk::caller()) {
+            Ok(())
+        } else {
+            Err("You are not stable authorized".to_string())
+        }
     })
-    .await
-    .unwrap();
-    status.0.settings.controllers.contains(&caller)
 }
 
 fn authorize_principal(principal: &Principal) {
