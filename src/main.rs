@@ -2,15 +2,23 @@ use candid::{CandidType, Decode, Deserialize, Encode, Principal};
 use ic_cdk::api::management_canister::main::{canister_status, CanisterIdRecord};
 use ic_cdk::export::candid::candid_method;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+#[cfg(not(target_arch = "wasm32"))]
+use ic_stable_structures::{file_mem::FileMemory, StableBTreeMap};
+#[cfg(target_arch = "wasm32")]
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use sha2::{Digest, Sha256};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fmt::Debug;
+use std::fs::File;
 #[macro_use]
 extern crate num_derive;
 
+#[cfg(not(target_arch = "wasm32"))]
+type Memory = VirtualMemory<FileMemory>;
+#[cfg(target_arch = "wasm32")]
 type Memory = VirtualMemory<DefaultMemoryImpl>;
+
 type Blob = Vec<u8>;
 
 const MAX_PROFILES_KEY_SIZE: u32 = 32;
@@ -32,6 +40,10 @@ enum Auth {
 }
 
 thread_local! {
+#[cfg(not(target_arch = "wasm32"))]
+    static MEMORY_MANAGER: RefCell<MemoryManager<FileMemory>> =
+        RefCell::new(MemoryManager::init(FileMemory::new(File::open("backup/stable_memory.dat").unwrap())));
+#[cfg(target_arch = "wasm32")]
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
         RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
     static PROFILES: RefCell<StableBTreeMap<Memory, Blob, Blob>> = RefCell::new(
@@ -268,6 +280,11 @@ fn export_candid() -> String {
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {
     println!("{}", export_candid());
+    let principals = get_authorized();
+    println!("authorized principals: {}", principals.len());
+    for p in principals {
+        println!("  {}", p.to_text());
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
