@@ -165,6 +165,17 @@ fn is_stable_authorized() -> Result<(), String> {
 }
 ```
 
+
+Finally, we need to prime authorization during installation with the installing principal:
+
+```rust
+#[ic_cdk_macros::init]
+fn canister_init() {
+  authorize_principal(&ic_cdk::caller());
+  stable_authorize(ic_cdk::caller());
+}
+```
+
 In order to read and write backed up images of stable stable memory, we can compile the dApp and run it locally using conditional compilation directives to differentiate the environment:
 
 ```rust
