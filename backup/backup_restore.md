@@ -51,7 +51,7 @@ fn backup(offset: u32, count: u32) -> Vec<(String, Profile)> {
 }
 ```
 
-Then we can restore that data:
+Note that there is a limit on the amount of data which can be transfered during a method invocation (~2MB currently), so the data should be backed up in blocks of say 1000 entries. The `backup` function will return an empty vector if the offset is out of range and a short vector if the count is too large. Then we can restore that data:
 
 ```rust
 #[ic_cdk_macros::update(guard = "is_authorized")]
@@ -67,7 +67,7 @@ fn restore(profiles: Vec<(String, Profile)>) {
 }
 ```
 
-Of course we cannot allow just any user to download this data, so it must be protected by a guard:
+Similarly, we can restore blocks of say 1000 entries to keep under per invocation data size limit. Of course we cannot allow just any user to download this data, so it must be protected by a guard:
 
 ```rust
 fn is_authorized() -> Result<(), String> {
