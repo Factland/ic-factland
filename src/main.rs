@@ -148,8 +148,15 @@ fn login() -> Profile {
 
 #[ic_cdk_macros::query(guard = "is_authorized")]
 #[candid_method]
-fn backup() -> Vec<(String, Profile)> {
-    PROFILES.with(|p| p.borrow().iter().map(|(k, p)| (k.0.to_text(), p)).collect())
+fn backup(offset: u32, count: u32) -> Vec<(String, Profile)> {
+    PROFILES.with(|p| {
+        p.borrow()
+            .iter()
+            .skip(offset as usize)
+            .take(count as usize)
+            .map(|(k, p)| (k.0.to_text(), p))
+            .collect()
+    })
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]

@@ -8,7 +8,11 @@ export const idlFactory = ({ IDL }) => {
   return IDL.Service({
     'authorize' : IDL.Func([IDL.Principal], [], []),
     'authorize_controllers' : IDL.Func([], [], []),
-    'backup' : IDL.Func([], [IDL.Vec(IDL.Tuple(IDL.Text, Profile))], ['query']),
+    'backup' : IDL.Func(
+        [IDL.Nat32, IDL.Nat32],
+        [IDL.Vec(IDL.Tuple(IDL.Text, Profile))],
+        ['query'],
+      ),
     'deauthorize' : IDL.Func([IDL.Principal], [], []),
     'get_authorized' : IDL.Func([], [IDL.Vec(IDL.Principal)], ['query']),
     'login' : IDL.Func([], [Profile], ['query']),

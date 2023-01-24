@@ -12,7 +12,7 @@ service factland: {
   //
   // Backup/restore map from principal (in text) to Profile(s).
   //
-  backup: () -> (vec record { text; Profile }) query;
+  backup: (offset: nat32, count: nat32) -> (vec record { text; Profile }) query;
   restore: (vec record { text; Profile }) -> ();
   authorize: (principal) -> ();
   deauthorize: (principal) -> ();

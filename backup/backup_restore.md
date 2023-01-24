@@ -30,7 +30,7 @@ thread_local! {
 }
 ```
 
-Here we are defining a stable memory manager and a `BTreeMap` from `Principal` (wrapped in a Storable so that it can be stored in stable memory) to a user `Profile`.  Eventually this dApp will be controlled by a DOA via the [SNS](https://internetcomputer.org/docs/current/tokenomics/sns/sns-intro-tokens) but particularly while it is in active development we want to be able to backup and restore the profiles to enable a fast and safe development cycle.  Note that we are using `thread_local` and `RefCell` to tell Rust that we are operating in a single threaded environment.
+Here we are defining a stable memory manager and a `BTreeMap` from `Principal` (wrapped in a Storable so that it can be stored in stable memory) to a user `Profile`.  Eventually this dApp will be controlled by a DAO via the [SNS](https://internetcomputer.org/docs/current/tokenomics/sns/sns-intro-tokens) but particularly while it is in active development we want to be able to backup and restore the profiles to enable a fast and safe development cycle.  Note that we are using `thread_local` and `RefCell` to tell Rust that we are operating in a single threaded environment.
 
 ## Application Level Backup and Restore
 
@@ -39,8 +39,15 @@ The first thing we can do is export the data at the application level:
 ```rust
 #[ic_cdk_macros::query(guard = "is_authorized")]
 #[candid_method]
-fn backup() -> Vec<(String, Profile)> {
-  PROFILES.with(|p| p.borrow().iter().map(|(k, p)| (k.0.to_text(), p)).collect())
+fn backup(offset: u32, count: u32) -> Vec<(String, Profile)> {
+  PROFILES.with(|p| {
+      p.borrow()
+      .iter()
+      .skip(offset as usize)
+      .take(count as usize)
+      .map(|(k, p)| (k.0.to_text(), p))
+      .collect()
+      })
 }
 ```
 

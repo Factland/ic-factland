@@ -10,7 +10,7 @@ export interface Profile {
 export interface _SERVICE {
   'authorize' : ActorMethod<[Principal], undefined>,
   'authorize_controllers' : ActorMethod<[], undefined>,
-  'backup' : ActorMethod<[], Array<[string, Profile]>>,
+  'backup' : ActorMethod<[number, number], Array<[string, Profile]>>,
   'deauthorize' : ActorMethod<[Principal], undefined>,
   'get_authorized' : ActorMethod<[], Array<Principal>>,
   'login' : ActorMethod<[], Profile>,
