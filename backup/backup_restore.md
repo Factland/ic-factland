@@ -99,7 +99,7 @@ static AUTH: RefCell<StableBTreeMap<Memory, Blob, u32>> = RefCell::new(
   );
 ```
 
-Client code is available in the Factland repo for [backup](https://github.com/Factland/ic-factland/tree/main/backup/backup.js) and [restore](https://github.com/Factland/ic-factland/tree/main/backup/restore.js).  This code written in javascript and runs on nodejs.  It uses the deploying Principal to authorize an operator Principal which does the backkup, saving the data in JSON format, and restore.  Once the operator Principal is authorized and the client is initialized the core code just prints out the data in JSON format:
+Client code is available in the Factland repo for [backup](https://github.com/Factland/ic-factland/tree/main/backup/backup.js) and [restore](https://github.com/Factland/ic-factland/tree/main/backup/restore.js).  This code written in javascript and runs on nodejs.  It uses the deploying Principal to authorize an operator Principal which does the backup, saving the data in JSON format, and restore.  Once the operator Principal is authorized and the client is initialized the core code just prints out the data in JSON format:
 
 ```javascript
 let profiles = await actor.backup();
