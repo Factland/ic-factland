@@ -1,4 +1,4 @@
-use candid::{CandidType, Decode, Deserialize, Encode, Principal};
+use candid::{CandidType, Decode, Deserialize, Encode, Func, Principal};
 use ic_cdk::api::management_canister::main::{canister_status, CanisterIdRecord};
 use ic_cdk::export::candid::candid_method;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
@@ -284,6 +284,56 @@ fn authorize_principal(principal: &Principal) {
             .insert(principal.as_slice().to_vec(), value as u32)
             .unwrap();
     });
+}
+
+pub type HeaderField = (String, String);
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct HttpRequest {
+    pub method: String,
+    pub url: String,
+    pub headers: Vec<HeaderField>,
+    pub body: Blob,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct Token {}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum StreamingStrategy {
+    Callback { callback: Func, token: Token },
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct HttpResponse {
+    pub status_code: u16,
+    pub headers: Vec<HeaderField>,
+    pub body: Blob,
+    pub streaming_strategy: Option<StreamingStrategy>,
+}
+
+#[ic_cdk_macros::query]
+#[candid_method]
+async fn http_request(_: HttpRequest) -> HttpResponse {
+    let body = "".to_string()
+        + &format!("GIT_REPO=https://github.com/Factland/ic-factland.git\n")
+        + &format!("GIT_BRANCH={}\n", env!("VERGEN_GIT_BRANCH"))
+        + &format!(
+            "GIT_COMMIT_TIMESTAMP={}\n",
+            env!("VERGEN_GIT_COMMIT_TIMESTAMP")
+        )
+        + &format!("RUSTC_SEMVER={}\n", env!("VERGEN_RUSTC_SEMVER"))
+        + &format!("CARGO_PROFILE={}\n", env!("VERGEN_CARGO_PROFILE"))
+        + &format!("BUILD_TIMESTAMP={}\n", env!("VERGEN_BUILD_TIMESTAMP"));
+    return HttpResponse {
+        status_code: 200,
+        headers: vec![
+            ("Content-Type".to_string(), "text/plain".to_string()),
+            ("Content-Length".to_string(), body.len().to_string()),
+        ],
+        body: body.into(),
+        streaming_strategy: None,
+    };
 }
 
 ic_cdk::export::candid::export_service!();

@@ -17,6 +17,10 @@ serde = "1"
 serde_bytes = "0.11"
 sha2 = "0.10"
 
+[build-dependencies]
+anyhow = "1"
+vergen = "6"
+
 [profile.release]
 debug = false
 lto = true
