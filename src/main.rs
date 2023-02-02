@@ -90,14 +90,28 @@ thread_local! {
 
 #[ic_cdk_macros::update]
 #[candid_method]
-fn set_profile(profile: Profile) -> Profile {
+async fn set_profile(mut profile: Profile) -> Profile {
     let user = PrincipalStorable(ic_cdk::caller());
-    PROFILES.with(|p| {
+    let old_profile = PROFILES.with(|p| {
         if let Some(old_profile) = p.borrow().get(&user) {
             if old_profile.updated_time_msecs >= profile.updated_time_msecs {
-                return old_profile.clone();
+                return Some(old_profile);
             }
         }
+        None
+    });
+    if let Some(old_profile) = old_profile {
+        return old_profile;
+    }
+    if profile.password == None {
+        let raw_rand: Vec<u8> =
+            match ic_cdk::call(Principal::management_canister(), "raw_rand", ()).await {
+                Ok((res,)) => res,
+                Err((_, err)) => ic_cdk::trap(&format!("failed to get rand: {}", err)),
+            };
+        profile.password = Some(hex::encode(Sha256::digest(raw_rand)));
+    }
+    PROFILES.with(|p| {
         p.borrow_mut().insert(user, profile.clone()).unwrap();
         profile
     })
@@ -135,7 +149,7 @@ async fn register(mut profile: Profile) -> Profile {
 }
 
 #[ic_cdk_macros::query]
-#[candid_method]
+#[candid_method(query)]
 fn login() -> Profile {
     let user = PrincipalStorable(ic_cdk::caller());
     PROFILES.with(|p| {
@@ -147,7 +161,7 @@ fn login() -> Profile {
 }
 
 #[ic_cdk_macros::query(guard = "is_authorized")]
-#[candid_method]
+#[candid_method(query)]
 fn backup(offset: u32, count: u32) -> Vec<(String, Profile)> {
     PROFILES.with(|p| {
         p.borrow()
@@ -172,13 +186,13 @@ fn restore(profiles: Vec<(String, Profile)>) {
 }
 
 #[ic_cdk_macros::query(guard = "is_stable_authorized")]
-#[candid_method]
+#[candid_method(query)]
 fn stable_size() -> u64 {
     ic_cdk::api::stable::stable64_size() * WASM_PAGE_SIZE
 }
 
 #[ic_cdk_macros::query(guard = "is_stable_authorized")]
-#[candid_method]
+#[candid_method(query)]
 fn stable_read(offset: u64, length: u64) -> Vec<u8> {
     let mut buffer = Vec::new();
     buffer.resize(length as usize, 0);
@@ -200,7 +214,7 @@ fn stable_write(offset: u64, buffer: Vec<u8>) {
 }
 
 #[ic_cdk_macros::query]
-#[candid_method]
+#[candid_method(query)]
 fn get_authorized() -> Vec<Principal> {
     let mut authorized = Vec::new();
     AUTH.with(|a| {
@@ -313,7 +327,7 @@ pub struct HttpResponse {
 }
 
 #[ic_cdk_macros::query]
-#[candid_method]
+#[candid_method(query)]
 async fn http_request(_: HttpRequest) -> HttpResponse {
     let body = "".to_string()
         + &format!("GIT_REPO=https://github.com/Factland/ic-factland.git\n")
