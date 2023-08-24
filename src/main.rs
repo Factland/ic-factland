@@ -1,11 +1,11 @@
 use candid::{CandidType, Decode, Deserialize, Encode, Func, Principal};
 use ic_cdk::api::management_canister::main::{canister_status, CanisterIdRecord};
-use ic_cdk::export::candid::candid_method;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+use ic_stable_structures::{Storable, BoundedStorable};
 #[cfg(not(target_arch = "wasm32"))]
-use ic_stable_structures::{file_mem::FileMemory, StableBTreeMap, Storable};
+use ic_stable_structures::{file_mem::FileMemory, StableBTreeMap};
 #[cfg(target_arch = "wasm32")]
-use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap, Storable};
+use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -23,9 +23,6 @@ type Memory = VirtualMemory<DefaultMemoryImpl>;
 
 type Blob = Vec<u8>;
 
-const MAX_PROFILES_KEY_SIZE: u32 = 32;
-const MAX_PROFILES_VALUE_SIZE: u32 = 256;
-const MAX_AUTH_KEY_SIZE: u32 = 32;
 const WASM_PAGE_SIZE: u64 = 65536;
 
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
@@ -36,7 +33,7 @@ struct Profile {
     email: Option<String>,
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, CandidType, Deserialize)]
 struct PrincipalStorable(Principal);
 
 #[derive(Clone, Debug, CandidType, Deserialize, FromPrimitive)]
@@ -49,9 +46,14 @@ impl Storable for Profile {
         Cow::Owned(Encode!(self).unwrap())
     }
 
-    fn from_bytes(bytes: Vec<u8>) -> Self {
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         Decode!(&bytes, Self).unwrap()
     }
+}
+
+impl BoundedStorable for Profile {
+    const MAX_SIZE: u32 = 256;
+    const IS_FIXED_SIZE: bool = false;
 }
 
 impl Storable for PrincipalStorable {
@@ -59,9 +61,14 @@ impl Storable for PrincipalStorable {
         Cow::Owned(self.0.as_slice().to_vec())
     }
 
-    fn from_bytes(bytes: Vec<u8>) -> Self {
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         PrincipalStorable(Principal::from_slice(&bytes))
     }
+}
+
+impl BoundedStorable for PrincipalStorable {
+    const MAX_SIZE: u32 = 29;
+    const IS_FIXED_SIZE: bool = false;
 }
 
 thread_local! {
@@ -71,25 +78,18 @@ thread_local! {
 #[cfg(target_arch = "wasm32")]
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
         RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
-    static PROFILES: RefCell<StableBTreeMap<Memory, PrincipalStorable, Profile>> = RefCell::new(
-        StableBTreeMap::init_with_sizes(
-            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0))),
-            MAX_PROFILES_KEY_SIZE,
-            MAX_PROFILES_VALUE_SIZE
-            )
+    static PROFILES: RefCell<StableBTreeMap<PrincipalStorable, Profile, Memory>> = RefCell::new(
+        StableBTreeMap::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0))))
         );
-    static AUTH: RefCell<StableBTreeMap<Memory, Blob, u32>> = RefCell::new(
-        StableBTreeMap::init_with_sizes(
-            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(3))),
-            MAX_AUTH_KEY_SIZE,
-            4
-            )
+    static AUTH: RefCell<StableBTreeMap<PrincipalStorable, u32, Memory>> = RefCell::new(
+        StableBTreeMap::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(3))))
         );
     static AUTH_STABLE: RefCell<HashSet<Principal>> = RefCell::new(HashSet::<Principal>::new());
 }
 
 #[ic_cdk_macros::update]
-#[candid_method]
 async fn set_profile(mut profile: Profile) -> Profile {
     let user = PrincipalStorable(ic_cdk::caller());
     let old_profile = PROFILES.with(|p| {
@@ -118,7 +118,6 @@ async fn set_profile(mut profile: Profile) -> Profile {
 }
 
 #[ic_cdk_macros::update]
-#[candid_method]
 async fn register(mut profile: Profile) -> Profile {
     let user = PrincipalStorable(ic_cdk::caller());
     let user_text = ic_cdk::caller().to_text();
@@ -149,7 +148,6 @@ async fn register(mut profile: Profile) -> Profile {
 }
 
 #[ic_cdk_macros::query]
-#[candid_method(query)]
 fn login() -> Profile {
     let user = PrincipalStorable(ic_cdk::caller());
     PROFILES.with(|p| {
@@ -161,7 +159,6 @@ fn login() -> Profile {
 }
 
 #[ic_cdk_macros::query(guard = "is_authorized")]
-#[candid_method(query)]
 fn backup(offset: u32, count: u32) -> Vec<(String, Profile)> {
     PROFILES.with(|p| {
         p.borrow()
@@ -174,7 +171,6 @@ fn backup(offset: u32, count: u32) -> Vec<(String, Profile)> {
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
-#[candid_method]
 fn restore(profiles: Vec<(String, Profile)>) {
     PROFILES.with(|m| {
         let mut m = m.borrow_mut();
@@ -186,13 +182,11 @@ fn restore(profiles: Vec<(String, Profile)>) {
 }
 
 #[ic_cdk_macros::query(guard = "is_stable_authorized")]
-#[candid_method(query)]
 fn stable_size() -> u64 {
     ic_cdk::api::stable::stable64_size() * WASM_PAGE_SIZE
 }
 
 #[ic_cdk_macros::query(guard = "is_stable_authorized")]
-#[candid_method(query)]
 fn stable_read(offset: u64, length: u64) -> Vec<u8> {
     let mut buffer = Vec::new();
     buffer.resize(length as usize, 0);
@@ -201,7 +195,6 @@ fn stable_read(offset: u64, length: u64) -> Vec<u8> {
 }
 
 #[ic_cdk_macros::update(guard = "is_stable_authorized")]
-#[candid_method]
 fn stable_write(offset: u64, buffer: Vec<u8>) {
     let size = offset + buffer.len() as u64;
     let old_size = ic_cdk::api::stable::stable64_size() * WASM_PAGE_SIZE;
@@ -214,36 +207,30 @@ fn stable_write(offset: u64, buffer: Vec<u8>) {
 }
 
 #[ic_cdk_macros::query]
-#[candid_method(query)]
 fn get_authorized() -> Vec<Principal> {
     let mut authorized = Vec::new();
     AUTH.with(|a| {
         for (k, _v) in a.borrow().iter() {
-            authorized.push(Principal::from_slice(&k));
+            authorized.push(k.0);
         }
     });
     authorized
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
-#[candid_method]
 fn authorize(principal: Principal) {
     authorize_principal(&principal);
 }
 
 #[ic_cdk_macros::update(guard = "is_stable_authorized")]
-#[candid_method]
 fn stable_authorize(principal: Principal) {
     AUTH_STABLE.with(|a| a.borrow_mut().insert(principal));
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
-#[candid_method]
 fn deauthorize(principal: Principal) {
     AUTH.with(|a| {
-        a.borrow_mut()
-            .remove(&principal.as_slice().to_vec())
-            .unwrap();
+        a.borrow_mut().remove(&PrincipalStorable(principal)).unwrap();
     });
 }
 
@@ -254,7 +241,6 @@ fn canister_init() {
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
-#[candid_method]
 async fn authorize_controllers() {
     let status = canister_status(CanisterIdRecord {
         canister_id: ic_cdk::api::id(),
@@ -272,7 +258,7 @@ async fn authorize_controllers() {
 fn is_authorized() -> Result<(), String> {
     AUTH.with(|a| {
         if a.borrow()
-            .contains_key(&ic_cdk::caller().as_slice().to_vec())
+            .contains_key(&PrincipalStorable(ic_cdk::caller()))
         {
             Ok(())
         } else {
@@ -295,7 +281,7 @@ fn authorize_principal(principal: &Principal) {
     let value = Auth::Admin;
     AUTH.with(|a| {
         a.borrow_mut()
-            .insert(principal.as_slice().to_vec(), value as u32)
+            .insert(PrincipalStorable(*principal), value as u32)
             .unwrap();
     });
 }
@@ -327,15 +313,13 @@ pub struct HttpResponse {
 }
 
 #[ic_cdk_macros::query]
-#[candid_method(query)]
 async fn http_request(_: HttpRequest) -> HttpResponse {
     let body = "".to_string()
         + &format!("GIT_REPO=https://github.com/Factland/ic-factland.git\n")
         + &format!("GIT_BRANCH={}\n", env!("VERGEN_GIT_BRANCH"))
         + &format!(
             "GIT_COMMIT_TIMESTAMP={}\n",
-            env!("VERGEN_GIT_COMMIT_TIMESTAMP")
-        )
+            env!("VERGEN_GIT_COMMIT_TIMESTAMP"))
         + &format!("RUSTC_SEMVER={}\n", env!("VERGEN_RUSTC_SEMVER"))
         + &format!("CARGO_PROFILE={}\n", env!("VERGEN_CARGO_PROFILE"))
         + &format!("BUILD_TIMESTAMP={}\n", env!("VERGEN_BUILD_TIMESTAMP"));
@@ -350,7 +334,7 @@ async fn http_request(_: HttpRequest) -> HttpResponse {
     };
 }
 
-ic_cdk::export::candid::export_service!();
+candid::export_service!();
 
 #[ic_cdk_macros::query(name = "__get_candid_interface_tmp_hack")]
 fn export_candid() -> String {

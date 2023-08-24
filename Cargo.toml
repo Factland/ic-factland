@@ -5,11 +5,11 @@ authors = ["John Plevyak <jplevyak@gmail.com>"]
 edition = "2021"
 
 [dependencies]
-candid = "0.8"
-hex = "0.4.3"
-ic-cdk = "0.6"
-ic-cdk-macros = "0.6"
-ic-stable-structures = "0.3"
+candid = "0.9"
+hex = "0.4"
+ic-cdk = "0.10"
+ic-cdk-macros = "0.7"
+ic-stable-structures = "0.5"
 num = "0.4"
 num-traits = "0.2"
 num-derive = "0.3"
