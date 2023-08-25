@@ -1,9 +1,9 @@
 use candid::{CandidType, Decode, Deserialize, Encode, Func, Principal};
 use ic_cdk::api::management_canister::main::{canister_status, CanisterIdRecord};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
-use ic_stable_structures::{Storable, BoundedStorable};
 #[cfg(not(target_arch = "wasm32"))]
 use ic_stable_structures::{file_mem::FileMemory, StableBTreeMap};
+use ic_stable_structures::{BoundedStorable, Storable};
 #[cfg(target_arch = "wasm32")]
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use sha2::{Digest, Sha256};
@@ -11,8 +11,6 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fmt::Debug;
-#[cfg(not(target_arch = "wasm32"))]
-use std::fs::File;
 #[macro_use]
 extern crate num_derive;
 
@@ -74,7 +72,7 @@ impl BoundedStorable for PrincipalStorable {
 thread_local! {
 #[cfg(not(target_arch = "wasm32"))]
     static MEMORY_MANAGER: RefCell<MemoryManager<FileMemory>> =
-        RefCell::new(MemoryManager::init(FileMemory::new(File::open("backup/stable_memory.dat").unwrap())));
+        RefCell::new(MemoryManager::init(FileMemory::new(std::fs::OpenOptions::new().read(true).write(true).create(true).open("backup/stable_memory.dat").unwrap())));
 #[cfg(target_arch = "wasm32")]
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
         RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
@@ -90,6 +88,7 @@ thread_local! {
 }
 
 #[ic_cdk_macros::update]
+#[candid::candid_method]
 async fn set_profile(mut profile: Profile) -> Profile {
     let user = PrincipalStorable(ic_cdk::caller());
     let old_profile = PROFILES.with(|p| {
@@ -118,6 +117,7 @@ async fn set_profile(mut profile: Profile) -> Profile {
 }
 
 #[ic_cdk_macros::update]
+#[candid::candid_method]
 async fn register(mut profile: Profile) -> Profile {
     let user = PrincipalStorable(ic_cdk::caller());
     let user_text = ic_cdk::caller().to_text();
@@ -148,6 +148,7 @@ async fn register(mut profile: Profile) -> Profile {
 }
 
 #[ic_cdk_macros::query]
+#[candid::candid_method]
 fn login() -> Profile {
     let user = PrincipalStorable(ic_cdk::caller());
     PROFILES.with(|p| {
@@ -159,6 +160,7 @@ fn login() -> Profile {
 }
 
 #[ic_cdk_macros::query(guard = "is_authorized")]
+#[candid::candid_method]
 fn backup(offset: u32, count: u32) -> Vec<(String, Profile)> {
     PROFILES.with(|p| {
         p.borrow()
@@ -171,6 +173,7 @@ fn backup(offset: u32, count: u32) -> Vec<(String, Profile)> {
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
+#[candid::candid_method]
 fn restore(profiles: Vec<(String, Profile)>) {
     PROFILES.with(|m| {
         let mut m = m.borrow_mut();
@@ -182,11 +185,13 @@ fn restore(profiles: Vec<(String, Profile)>) {
 }
 
 #[ic_cdk_macros::query(guard = "is_stable_authorized")]
+#[candid::candid_method]
 fn stable_size() -> u64 {
     ic_cdk::api::stable::stable64_size() * WASM_PAGE_SIZE
 }
 
 #[ic_cdk_macros::query(guard = "is_stable_authorized")]
+#[candid::candid_method]
 fn stable_read(offset: u64, length: u64) -> Vec<u8> {
     let mut buffer = Vec::new();
     buffer.resize(length as usize, 0);
@@ -195,6 +200,7 @@ fn stable_read(offset: u64, length: u64) -> Vec<u8> {
 }
 
 #[ic_cdk_macros::update(guard = "is_stable_authorized")]
+#[candid::candid_method]
 fn stable_write(offset: u64, buffer: Vec<u8>) {
     let size = offset + buffer.len() as u64;
     let old_size = ic_cdk::api::stable::stable64_size() * WASM_PAGE_SIZE;
@@ -207,6 +213,7 @@ fn stable_write(offset: u64, buffer: Vec<u8>) {
 }
 
 #[ic_cdk_macros::query]
+#[candid::candid_method]
 fn get_authorized() -> Vec<Principal> {
     let mut authorized = Vec::new();
     AUTH.with(|a| {
@@ -218,19 +225,24 @@ fn get_authorized() -> Vec<Principal> {
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
+#[candid::candid_method]
 fn authorize(principal: Principal) {
     authorize_principal(&principal);
 }
 
 #[ic_cdk_macros::update(guard = "is_stable_authorized")]
+#[candid::candid_method]
 fn stable_authorize(principal: Principal) {
     AUTH_STABLE.with(|a| a.borrow_mut().insert(principal));
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
+#[candid::candid_method]
 fn deauthorize(principal: Principal) {
     AUTH.with(|a| {
-        a.borrow_mut().remove(&PrincipalStorable(principal)).unwrap();
+        a.borrow_mut()
+            .remove(&PrincipalStorable(principal))
+            .unwrap();
     });
 }
 
@@ -241,6 +253,7 @@ fn canister_init() {
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
+#[candid::candid_method]
 async fn authorize_controllers() {
     let status = canister_status(CanisterIdRecord {
         canister_id: ic_cdk::api::id(),
@@ -314,15 +327,7 @@ pub struct HttpResponse {
 
 #[ic_cdk_macros::query]
 async fn http_request(_: HttpRequest) -> HttpResponse {
-    let body = "".to_string()
-        + &format!("GIT_REPO=https://github.com/Factland/ic-factland.git\n")
-        + &format!("GIT_BRANCH={}\n", env!("VERGEN_GIT_BRANCH"))
-        + &format!(
-            "GIT_COMMIT_TIMESTAMP={}\n",
-            env!("VERGEN_GIT_COMMIT_TIMESTAMP"))
-        + &format!("RUSTC_SEMVER={}\n", env!("VERGEN_RUSTC_SEMVER"))
-        + &format!("CARGO_PROFILE={}\n", env!("VERGEN_CARGO_PROFILE"))
-        + &format!("BUILD_TIMESTAMP={}\n", env!("VERGEN_BUILD_TIMESTAMP"));
+    let body = info();
     return HttpResponse {
         status_code: 200,
         headers: vec![
@@ -335,6 +340,20 @@ async fn http_request(_: HttpRequest) -> HttpResponse {
 }
 
 candid::export_service!();
+
+fn info() -> String {
+    "".to_string()
+        + &format!("GIT_REPO=https://github.com/Factland/ic-factland.git\n")
+        + &format!("GIT_BRANCH={}\n", env!("VERGEN_GIT_BRANCH"))
+        + &format!(
+            "GIT_COMMIT_TIMESTAMP={}\n",
+            env!("VERGEN_GIT_COMMIT_TIMESTAMP")
+        )
+        + &format!("RUSTC_SEMVER={}\n", env!("VERGEN_RUSTC_SEMVER"))
+        + &format!("CARGO_PROFILE={}\n", env!("VERGEN_CARGO_PROFILE"))
+        + &format!("BUILD_TIMESTAMP={}\n", env!("VERGEN_BUILD_TIMESTAMP"))
+        + &format!("CANDID:\n{}\n", __export_service())
+}
 
 #[ic_cdk_macros::query(name = "__get_candid_interface_tmp_hack")]
 fn export_candid() -> String {
